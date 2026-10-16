@@ -1,4 +1,4 @@
-"""Shared experimental protocol for DDGSR and baseline runners."""
+"""Shared experimental protocol for DDGSRL and baseline runners."""
 SEEDS = (42, 100, 2024, 3407, 8080)
 DEFAULT_SEED = SEEDS[0]
 SPLIT_SEED = 100

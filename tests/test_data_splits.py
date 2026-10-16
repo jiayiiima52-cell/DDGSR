@@ -1,7 +1,7 @@
 import scipy.sparse as sp
 import pytest
 
-import ddgsr.data as data
+import ddgsrl.data as data
 
 
 def _pairs(split):

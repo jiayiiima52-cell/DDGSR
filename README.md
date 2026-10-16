@@ -1,6 +1,6 @@
-# DDGSR source code
+# DDGSRL source code
 
-This repository contains the DDGSR implementation for Mashup-API recommendation.
+This repository contains the DDGSRL implementation for Mashup-API recommendation.
 
 ## Setup
 

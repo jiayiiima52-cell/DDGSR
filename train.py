@@ -14,15 +14,15 @@ from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
 from experiment_config import GRAPH_SEED, seed_everything
-from ddgsr.config import Config
-from ddgsr.data import arrays, load_dataset, seen_items, sampled_negative_graph_semantic
-from ddgsr.graph import update_graphs
-from ddgsr.metrics import evaluate, evaluate_grouped, evaluate_by_item_degree
-from ddgsr.model import DDGSR, scipy_to_torch
+from ddgsrl.config import Config
+from ddgsrl.data import arrays, load_dataset, seen_items, sampled_negative_graph_semantic
+from ddgsrl.graph import update_graphs
+from ddgsrl.metrics import evaluate, evaluate_grouped, evaluate_by_item_degree
+from ddgsrl.model import DDGSRL, scipy_to_torch
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train and evaluate DDGSR")
+    parser = argparse.ArgumentParser(description="Train and evaluate DDGSRL")
     parser.add_argument("--dataset", choices=["ml-100k", "gowalla", "citeulike", "programmableweb", "tssgcf"], default="ml-100k")
     parser.add_argument("--data-root", type=Path, default=Path(__file__).parent / "data")
     parser.add_argument("--epochs", type=int, default=None)
@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("--full-train", action="store_true", help="Use all official training interactions")
     parser.add_argument("--selection-only", action="store_true",
                         help="Validation-only run: do not load or evaluate the test split")
-    parser.add_argument("--variant", choices=["base", "semantic", "semantic_ns", "semantic_svd", "stable_svd", "rank_rerank", "rank_loss", "rank_full", "conflict_gate", "ddgsr"], default="base")
+    parser.add_argument("--variant", choices=["base", "semantic", "semantic_ns", "semantic_svd", "stable_svd", "rank_rerank", "rank_loss", "rank_full", "conflict_gate", "ddgsrl"], default="base")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).parent / "outputs",
@@ -49,10 +49,10 @@ def parse_args():
                         help="Preserve SR and use DD as additive modulation: gate=1+alpha*DD")
     parser.add_argument("--view-fusion-weight", type=float, default=None,
                         help="Interest-view weight eta in eta*s_pos+(1-eta)*s_neg")
-    parser.add_argument("--ddgsr-view", choices=["dual", "interest", "disinterest"], default="dual",
-                        help="DDGSR view ablation: retain both, interest only, or disinterest only")
+    parser.add_argument("--ddgsrl-view", choices=["dual", "interest", "disinterest"], default="dual",
+                        help="DDGSRL view ablation: retain both, interest only, or disinterest only")
     parser.add_argument("--no-contrastive", action="store_true",
-                        help="DDGSR ablation: set the cross-view contrastive-loss weight to zero")
+                        help="DDGSRL ablation: set the cross-view contrastive-loss weight to zero")
     parser.add_argument("--no-graph-update", action="store_true", help="Disable Eqs. (18)-(24) for ablation")
     parser.add_argument("--dim", type=int)
     parser.add_argument("--layers", type=int)
@@ -180,10 +180,10 @@ def main():
         raise ValueError("selection patience must be positive")
     if args.constant_semantic_gate and args.disagreement_only_gate:
         raise ValueError("--constant-semantic-gate and --disagreement-only-gate are mutually exclusive")
-    if args.ddgsr_view != "dual" and args.variant not in {"base", "ddgsr"}:
-        raise ValueError("Single-view DDGSR ablation is supported only for base or ddgsr")
+    if args.ddgsrl_view != "dual" and args.variant not in {"base", "ddgsrl"}:
+        raise ValueError("Single-view DDGSRL ablation is supported only for base or ddgsrl")
     if args.disagreement_residual_gain is not None:
-        if args.variant not in {"conflict_gate", "ddgsr"} or not args.disagreement_only_gate:
+        if args.variant not in {"conflict_gate", "ddgsrl"} or not args.disagreement_only_gate:
             raise ValueError("Residual-preserving DD requires a disagreement-only gate")
         if args.disagreement_residual_gain < 0:
             raise ValueError("Disagreement residual gain must be non-negative")
@@ -223,7 +223,7 @@ def main():
         original_neg, negative_graph_diagnostics = sampled_negative_graph_semantic(
             train, config.users, config.items, args.negative_graph_seed,
             semantic_for_graph, args.negative_semantic_exclusion)
-    clean = args.variant == "ddgsr"
+    clean = args.variant == "ddgsrl"
     semantic = args.variant != "base"
     text_features = load_text_features(folder, device) if semantic and not clean else None
     semantic_score_features = None
@@ -243,15 +243,15 @@ def main():
         raw_text = load_text_features(folder, device) if fixed_text else text_features
         semantic_scores = (torch.nn.functional.normalize(raw_text[0], dim=1) @
                            torch.nn.functional.normalize(raw_text[1], dim=1).T).cpu().numpy()
-    model = DDGSR(config, text_features=text_features, degree_gates=gates,
+    model = DDGSRL(config, text_features=text_features, degree_gates=gates,
                  global_features=global_features, fixed_text=fixed_text,
                  semantic_residual=args.variant in rank_variants or clean,
                  semantic_score_weight=args.semantic_score_weight,
-                 conflict_semantic_gate=args.variant in {"conflict_gate", "ddgsr"},
+                 conflict_semantic_gate=args.variant in {"conflict_gate", "ddgsrl"},
                  conflict_gate_beta=args.conflict_gate_beta,
                  constant_semantic_gate=args.constant_semantic_gate,
                  disagreement_only_gate=args.disagreement_only_gate,
-                 view_mode=args.ddgsr_view,
+                 view_mode=args.ddgsrl_view,
                  disagreement_residual_gain=args.disagreement_residual_gain,
                  semantic_score_features=semantic_score_features,
                  view_fusion_weight=args.view_fusion_weight).to(device)
@@ -350,7 +350,7 @@ def main():
             current_pos, current_neg = update_graphs(
                 original_pos, original_neg, embeddings, config.users, config.items,
                 config.graph_ratio, config.graph_weight, average_interactions,
-                view_mode=args.ddgsr_view)
+                view_mode=args.ddgsrl_view)
         if should_stop:
             print("Early stopping")
             break
@@ -410,7 +410,7 @@ def main():
         "disagreement_only_gate": args.disagreement_only_gate,
         "disagreement_residual_gain": args.disagreement_residual_gain,
         "view_fusion_weight": args.view_fusion_weight,
-        "ddgsr_view": args.ddgsr_view,
+        "ddgsrl_view": args.ddgsrl_view,
         "no_contrastive": args.no_contrastive,
         "no_graph_update": args.no_graph_update,
         "hard_negative_sampling": args.hard_negative_sampling,
@@ -423,7 +423,7 @@ def main():
         "negative_semantic_exclusion": args.negative_semantic_exclusion,
         "negative_graph_seed": args.negative_graph_seed,
         "negative_graph_diagnostics": negative_graph_diagnostics,
-        "ddgsr": clean,
+        "ddgsrl": clean,
         "metrics_only": args.metrics_only,
         "parameter_count": parameter_count,
         "trainable_parameter_count": trainable_parameter_count,
@@ -447,9 +447,9 @@ def main():
         }
     output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     if not args.metrics_only:
-        torch.save(best_state, args.output_dir / f"ddgsr_best{suffix}.pt")
-        sp.save_npz(args.output_dir / f"ddgsr_best_interest{suffix}.npz", evaluation_pos)
-        sp.save_npz(args.output_dir / f"ddgsr_best_disinterest{suffix}.npz", evaluation_neg)
+        torch.save(best_state, args.output_dir / f"ddgsrl_best{suffix}.pt")
+        sp.save_npz(args.output_dir / f"ddgsrl_best_interest{suffix}.npz", evaluation_pos)
+        sp.save_npz(args.output_dir / f"ddgsrl_best_disinterest{suffix}.npz", evaluation_neg)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 import torch
-from ddgsr.config import Config
-from ddgsr.model import DDGSR
+from ddgsrl.config import Config
+from ddgsrl.model import DDGSRL
 from experiment_config import SEEDS
 from run_experiment import command
 
 
 def build(seed):
-    return DDGSR(Config(users=3, items=4, dim=8, seed=seed))
+    return DDGSRL(Config(users=3, items=4, dim=8, seed=seed))
 
 
 def test_initialization_follows_run_seed():
@@ -23,4 +23,4 @@ def test_runner_passes_each_protocol_seed(tmp_path):
     for seed in SEEDS:
         args = command(seed, tmp_path / "data", tmp_path / "outputs", "cpu")
         assert args[args.index("--seed") + 1] == str(seed)
-        assert args[args.index("--variant") + 1] == "ddgsr"
+        assert args[args.index("--variant") + 1] == "ddgsrl"
